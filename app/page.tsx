@@ -1,6 +1,9 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { Float, OrbitControls } from '@react-three/drei'
+import * as THREE from 'three'
 import {
   Activity,
   ArrowRight,
@@ -147,13 +150,58 @@ function ScanView({ t, scanState, imageUrl, onScan, onUpload, onAnalyze, onClose
   return <div className="mx-auto max-w-[1080px]"><div className="mb-9 flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div><p className="mb-4 text-xs font-bold uppercase tracking-[0.18em] text-[#8f2838]">{t.eyebrow}</p><h1 className="max-w-[640px] whitespace-pre-line text-4xl font-semibold leading-[1.05] tracking-[-0.055em] sm:text-5xl lg:text-[58px]">{t.title}</h1><p className="mt-5 max-w-[600px] text-[15px] leading-7 text-[#667068]">{t.subtitle}</p></div><div className="flex items-center gap-2 text-xs font-medium text-[#788179]"><ShieldCheck size={16} className="text-[#63866e]" />{t.privacy}</div></div>
     <div className="grid gap-5 lg:grid-cols-[1.35fr_0.85fr]">
       <div className="rounded-[26px] border border-[#dfe3dc] bg-white p-5 shadow-[0_12px_40px_rgba(44,55,43,0.05)] sm:p-7"><div className="mb-6 flex items-center justify-between"><div><h2 className="text-lg font-semibold">{t.guide}</h2><p className="mt-1 text-sm text-[#788179]">{t.guideText}</p></div><div className="rounded-full bg-[#f5ebe9] px-3 py-1.5 text-xs font-bold text-[#8f2838]">ABO / Rh(D)</div></div>
-        <div className="relative flex min-h-[260px] items-center justify-center overflow-hidden rounded-2xl bg-[#edf0eb] p-5"><div className="absolute inset-0 opacity-40" style={{ backgroundImage: 'linear-gradient(#d7ddd5 1px, transparent 1px), linear-gradient(90deg, #d7ddd5 1px, transparent 1px)', backgroundSize: '28px 28px' }} />{imageUrl ? <img src={imageUrl} alt="Uploaded test card preview" className="relative max-h-[235px] max-w-full rounded-xl object-contain shadow-lg" /> : <TestCard t={t} />}</div>
+        <div className="relative overflow-hidden rounded-2xl bg-[#101d2d] shadow-[inset_0_0_80px_rgba(191,42,64,0.12)]">{imageUrl ? <div className="flex min-h-[320px] items-center justify-center p-5"><img src={imageUrl} alt="Uploaded test card preview" className="relative max-h-[290px] max-w-full rounded-xl object-contain shadow-lg" /></div> : <BloodDropScene />}</div>
         <div className="mt-5 flex flex-col gap-3 sm:flex-row"><button onClick={onScan} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#8f2838] px-5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(143,40,56,0.2)] transition hover:bg-[#76202f]"><Camera size={17} />{t.scanCard}</button><button onClick={onUpload} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#dfe3dc] bg-white px-5 text-sm font-bold text-[#303631] transition hover:bg-[#f4f6f2]"><Upload size={17} />{t.upload}</button></div>
         {scanState === 'preview' && <div className="mt-4 flex items-center justify-between rounded-xl bg-[#f2f5f0] px-4 py-3"><span className="flex items-center gap-2 text-sm font-medium"><FileImage size={16} className="text-[#63866e]" />Image ready for local analysis</span><button onClick={onAnalyze} className="flex items-center gap-1 text-sm font-bold text-[#8f2838]">Analyze <ArrowRight size={15} /></button></div>}
         {scanState === 'camera' && <div className="mt-4 flex items-center justify-between rounded-xl bg-[#f5ebe9] px-4 py-3 text-sm"><span className="flex items-center gap-2 font-medium text-[#8f2838]"><Camera size={16} />Camera access requested. Use upload for the demo.</span><button onClick={onClose} aria-label={t.close}><X size={16} /></button></div>}
       </div>
       <div className="flex flex-col gap-5"><div className="rounded-[26px] border border-[#dfe3dc] bg-[#e9f0e7] p-6"><div className="mb-5 flex items-center gap-2 text-[#446451]"><LockKeyhole size={17} /><h2 className="font-semibold">{t.local}</h2></div><p className="text-sm leading-6 text-[#5d6e61]">{t.privacyText}</p><div className="mt-6 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[#63866e]"><Check size={15} /> No cloud upload</div></div><div className="rounded-[26px] border border-[#dfe3dc] bg-white p-6"><h2 className="mb-5 text-lg font-semibold">{t.how}</h2><div className="flex flex-col gap-5">{t.steps.map((step, i) => <div key={step} className="flex items-center gap-4"><div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#f5ebe9] text-sm font-bold text-[#8f2838]">0{i + 1}</div><span className="text-sm font-medium">{step}</span>{i < 2 && <ArrowRight size={15} className="ml-auto rotate-90 text-[#a4ada4]" />}</div>)}</div></div></div>
     </div><div className="mt-5 flex gap-3 rounded-2xl border border-[#ead8b9] bg-[#fff9ed] p-4 text-sm leading-6 text-[#7b684b]"><CircleHelp size={18} className="mt-1 shrink-0 text-[#bd8f42]" /><p><strong>{t.note}:</strong> {t.noteText}</p></div></div>
+}
+
+function BloodDropScene() {
+  return <div className="relative aspect-[1.75] min-h-[320px] w-full">
+    <Canvas camera={{ position: [0, 0.2, 5.2], fov: 34 }} dpr={[1, 1.6]} gl={{ antialias: true, alpha: true }}>
+      <color attach="background" args={["#101d2d"]} />
+      <ambientLight intensity={1.4} color="#ffd9dc" />
+      <directionalLight position={[3, 4, 4]} intensity={3.2} color="#fff1f2" />
+      <pointLight position={[-3, 0, 2]} intensity={5} color="#c52f4b" />
+      <Float speed={1.8} rotationIntensity={0.18} floatIntensity={0.5}>
+        <BloodDrop />
+      </Float>
+      <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.8} maxPolarAngle={Math.PI / 1.8} minPolarAngle={Math.PI / 2.8} />
+    </Canvas>
+    <div className="pointer-events-none absolute inset-x-0 bottom-5 text-center"><p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#ffbec8]">Live reaction model</p><p className="mt-1 text-xs text-[#b4c3d3]">Tap, drag, or watch the drop rotate</p></div>
+  </div>
+}
+
+function BloodDrop() {
+  const group = useRef<THREE.Group>(null)
+  useFrame(({ clock }) => { if (group.current) group.current.rotation.y = clock.getElapsedTime() * 0.35 })
+  return <group ref={group} position={[0, 0.25, 0]}>
+    <mesh position={[0, -0.25, 0]} scale={[0.9, 1.05, 0.9]} castShadow>
+      <sphereGeometry args={[0.9, 64, 64]} />
+      <meshPhysicalMaterial color="#b51f3b" roughness={0.16} metalness={0.08} clearcoat={1} clearcoatRoughness={0.12} transmission={0.08} />
+    </mesh>
+    <mesh position={[0, 1.02, 0]} rotation={[Math.PI, 0, 0]} castShadow>
+      <coneGeometry args={[0.58, 1.5, 64]} />
+      <meshPhysicalMaterial color="#b51f3b" roughness={0.16} metalness={0.08} clearcoat={1} clearcoatRoughness={0.12} />
+    </mesh>
+    <mesh position={[-0.3, 0.15, 0.77]} rotation={[0.2, 0, -0.25]}>
+      <sphereGeometry args={[0.17, 32, 32]} />
+      <meshBasicMaterial color="#ffd9df" transparent opacity={0.82} />
+    </mesh>
+    {[[-1.55, 0.9, -0.2], [1.45, -0.15, -0.4], [1.65, 1.15, 0.2], [-1.4, -1.1, 0.1]].map(([x, y, z], index) => <DropletParticle key={index} position={[x, y, z]} delay={index * 0.8} />)}
+  </group>
+}
+
+function DropletParticle({ position, delay }: { position: [number, number, number]; delay: number }) {
+  const ref = useRef<THREE.Mesh>(null)
+  useFrame(({ clock }) => { if (ref.current) ref.current.position.y = position[1] + Math.sin(clock.getElapsedTime() * 1.5 + delay) * 0.16 })
+  return <mesh ref={ref} position={position} scale={0.13}>
+    <sphereGeometry args={[1, 24, 24]} />
+    <meshStandardMaterial color="#ed536a" emissive="#7d1127" emissiveIntensity={0.7} />
+  </mesh>
 }
 
 function TestCard({ t }: { t: typeof copy.en }) { return <div className="relative z-10 w-full max-w-[510px] rotate-[-1deg] rounded-2xl border border-[#d3d4cd] bg-[#fbfbf7] p-5 shadow-[0_14px_30px_rgba(56,64,54,0.15)] sm:p-7"><div className="mb-7 flex items-start justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#8f2838]">BloodScan</p><p className="mt-1 text-xs text-[#89918a]">ABO / Rh(D) test card</p></div><div className="size-3 rounded-full bg-[#8f2838]" /></div><div className="grid grid-cols-3 gap-3">{[t.antiA, t.antiB, t.antiD].map((label) => <div key={label} className="text-center"><div className="mb-2 flex aspect-square items-center justify-center rounded-xl border-2 border-dashed border-[#cbd3c8] bg-[#f0f2ec]"><div className="size-10 rounded-full border-4 border-[#d7b0a8] bg-[#ead0ca] shadow-inner" /></div><span className="text-[11px] font-bold text-[#5e675f]">{label}</span></div>)}</div><div className="mt-6 flex justify-between text-[9px] font-medium uppercase tracking-[0.12em] text-[#a0a69f]"><span>ALIGN</span><span>KEEP FLAT</span><span>NO GLARE</span></div></div> }
