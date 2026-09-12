@@ -1,9 +1,7 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useRef, useState } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { Float, OrbitControls } from '@react-three/drei'
-import * as THREE from 'three'
 import {
   Activity,
   ArrowRight,
@@ -30,6 +28,11 @@ import {
 type View = 'scan' | 'history' | 'devices'
 type Language = 'en' | 'de'
 type ScanState = 'idle' | 'camera' | 'preview' | 'analyzing' | 'result'
+
+const BloodDropScene = dynamic(() => import('@/components/blood-drop-scene').then((module) => module.BloodDropScene), {
+  ssr: false,
+  loading: () => <div className="flex min-h-[320px] items-center justify-center bg-[#101d2d] text-xs font-bold uppercase tracking-[0.2em] text-[#ffbec8]">Loading reaction model</div>,
+})
 
 const copy = {
   en: {
@@ -159,21 +162,6 @@ function ScanView({ t, scanState, imageUrl, onScan, onUpload, onAnalyze, onClose
     </div><div className="mt-5 flex gap-3 rounded-2xl border border-[#ead8b9] bg-[#fff9ed] p-4 text-sm leading-6 text-[#7b684b]"><CircleHelp size={18} className="mt-1 shrink-0 text-[#bd8f42]" /><p><strong>{t.note}:</strong> {t.noteText}</p></div></div>
 }
 
-function BloodDropScene() {
-  return <div className="relative aspect-[1.75] min-h-[320px] w-full">
-    <Canvas camera={{ position: [0, 0.2, 5.2], fov: 34 }} dpr={[1, 1.6]} gl={{ antialias: true, alpha: true }}>
-      <color attach="background" args={["#101d2d"]} />
-      <ambientLight intensity={1.4} color="#ffd9dc" />
-      <directionalLight position={[3, 4, 4]} intensity={3.2} color="#fff1f2" />
-      <pointLight position={[-3, 0, 2]} intensity={5} color="#c52f4b" />
-      <Float speed={1.8} rotationIntensity={0.18} floatIntensity={0.5}>
-        <BloodDrop />
-      </Float>
-      <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.8} maxPolarAngle={Math.PI / 1.8} minPolarAngle={Math.PI / 2.8} />
-    </Canvas>
-    <div className="pointer-events-none absolute inset-x-0 bottom-5 text-center"><p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#ffbec8]">Live reaction model</p><p className="mt-1 text-xs text-[#b4c3d3]">Tap, drag, or watch the drop rotate</p></div>
-  </div>
-}
 
 function BloodDrop() {
   const group = useRef<THREE.Group>(null)
