@@ -2,6 +2,9 @@
 
 import dynamic from 'next/dynamic'
 import { useRef, useState } from 'react'
+import { useFrame } from '@react-three/fiber'
+import * as THREE from 'three'
+import { analyzeImageLocally, type LocalAnalysis } from '@/lib/blood-analysis'
 import {
   Activity,
   ArrowRight,
@@ -78,6 +81,7 @@ export default function Page() {
   const [language, setLanguage] = useState<Language>('en')
   const [scanState, setScanState] = useState<ScanState>('idle')
   const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [analysis, setAnalysis] = useState<LocalAnalysis | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const t = copy[language]
 
@@ -97,9 +101,29 @@ export default function Page() {
     }
   }
 
-  const analyze = () => {
+  const analyze = async () => {
+    if (!imageUrl) return
     setScanState('analyzing')
-    window.setTimeout(() => setScanState('result'), 1100)
+    try {
+      const local = await analyzeImageLocally(imageUrl)
+      setAnalysis(local)
+      setScanState('result')
+      const imageResponse = await fetch(imageUrl)
+      const imageBlob = await imageResponse.blob()
+      const reader = new FileReader()
+      reader.onloadend = async () => {
+        try {
+          const response = await fetch('/api/analyze-card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: reader.result }) })
+          if (!response.ok) return
+          const vision = await response.json()
+          setAnalysis((current) => current ? { ...current, status: current.status === 'interpretable' && vision.cardRecognized ? 'interpretable' : 'inconclusive', reason: current.reason || vision.explanation, reactions: { antiA: vision.antiA, antiB: vision.antiB, antiD: vision.antiD } } : current)
+        } catch { /* local result remains visible */ }
+      }
+      reader.readAsDataURL(imageBlob)
+    } catch {
+      setAnalysis({ status: 'inconclusive', reason: 'The image could not be processed safely.', quality: { score: 0, blur: 1, glare: 1, framing: 0 }, reactions: { antiA: { call: 'uncertain', confidence: 0, evidence: 'Unreadable image.' }, antiB: { call: 'uncertain', confidence: 0, evidence: 'Unreadable image.' }, antiD: { call: 'uncertain', confidence: 0, evidence: 'Unreadable image.' } }, bloodType: null })
+      setScanState('result')
+    }
   }
 
   return (
@@ -132,7 +156,7 @@ export default function Page() {
           </header>
 
           <div className="flex-1 px-5 py-8 sm:px-8 lg:px-12 lg:py-12">
-            {view === 'scan' && <ScanView t={t} scanState={scanState} imageUrl={imageUrl} onScan={startCamera} onUpload={() => fileRef.current?.click()} onAnalyze={analyze} onClose={() => { setScanState('idle'); setImageUrl(null) }} />}
+            {view === 'scan' && <ScanView t={t} scanState={scanState} imageUrl={imageUrl} analysis={analysis} onScan={startCamera} onUpload={() => fileRef.current?.click()} onAnalyze={analyze} onClose={() => { setScanState('idle'); setImageUrl(null); setAnalysis(null) }} />}
             {view === 'history' && <HistoryView t={t} />}
             {view === 'devices' && <DevicesView t={t} />}
           </div>
@@ -147,9 +171,9 @@ function NavButton({ active, icon: Icon, label, onClick }: { active: boolean; ic
   return <button onClick={onClick} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition ${active ? 'bg-white text-[#8f2838] shadow-sm' : 'text-[#6d756e] hover:bg-white/70 hover:text-[#202321]'}`}><Icon size={17} /><span>{label}</span>{active && <ChevronRight size={15} className="ml-auto" />}</button>
 }
 
-function ScanView({ t, scanState, imageUrl, onScan, onUpload, onAnalyze, onClose }: { t: typeof copy.en; scanState: ScanState; imageUrl: string | null; onScan: () => void; onUpload: () => void; onAnalyze: () => void; onClose: () => void }) {
+function ScanView({ t, scanState, imageUrl, analysis, onScan, onUpload, onAnalyze, onClose }: { t: typeof copy.en; scanState: ScanState; imageUrl: string | null; analysis: LocalAnalysis | null; onScan: () => void; onUpload: () => void; onAnalyze: () => void; onClose: () => void }) {
   if (scanState === 'analyzing') return <div className="mx-auto flex min-h-[560px] max-w-[760px] flex-col items-center justify-center text-center"><div className="mb-7 flex size-20 items-center justify-center rounded-full bg-[#f1dfe1] text-[#8f2838]"><Microscope size={34} className="animate-pulse" /></div><p className="mb-2 text-sm font-bold uppercase tracking-[0.18em] text-[#8f2838]">{t.analyzing}</p><h1 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">{t.analyzingText}</h1><div className="mt-8 h-1 w-52 overflow-hidden rounded-full bg-[#e5d2d5]"><div className="h-full w-1/2 animate-[slide_1.1s_ease-in-out_infinite] rounded-full bg-[#8f2838]" /></div></div>
-  if (scanState === 'result') return <ResultView t={t} onClose={onClose} />
+  if (scanState === 'result') return <ResultView t={t} analysis={analysis} onClose={onClose} />
   return <div className="mx-auto max-w-[1080px]"><div className="mb-9 flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div><p className="mb-4 text-xs font-bold uppercase tracking-[0.18em] text-[#8f2838]">{t.eyebrow}</p><h1 className="max-w-[640px] whitespace-pre-line text-4xl font-semibold leading-[1.05] tracking-[-0.055em] sm:text-5xl lg:text-[58px]">{t.title}</h1><p className="mt-5 max-w-[600px] text-[15px] leading-7 text-[#667068]">{t.subtitle}</p></div><div className="flex items-center gap-2 text-xs font-medium text-[#788179]"><ShieldCheck size={16} className="text-[#63866e]" />{t.privacy}</div></div>
     <div className="grid gap-5 lg:grid-cols-[1.35fr_0.85fr]">
       <div className="rounded-[26px] border border-[#dfe3dc] bg-white p-5 shadow-[0_12px_40px_rgba(44,55,43,0.05)] sm:p-7"><div className="mb-6 flex items-center justify-between"><div><h2 className="text-lg font-semibold">{t.guide}</h2><p className="mt-1 text-sm text-[#788179]">{t.guideText}</p></div><div className="rounded-full bg-[#f5ebe9] px-3 py-1.5 text-xs font-bold text-[#8f2838]">ABO / Rh(D)</div></div>
@@ -194,7 +218,7 @@ function DropletParticle({ position, delay }: { position: [number, number, numbe
 
 function TestCard({ t }: { t: typeof copy.en }) { return <div className="relative z-10 w-full max-w-[510px] rotate-[-1deg] rounded-2xl border border-[#d3d4cd] bg-[#fbfbf7] p-5 shadow-[0_14px_30px_rgba(56,64,54,0.15)] sm:p-7"><div className="mb-7 flex items-start justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#8f2838]">BloodScan</p><p className="mt-1 text-xs text-[#89918a]">ABO / Rh(D) test card</p></div><div className="size-3 rounded-full bg-[#8f2838]" /></div><div className="grid grid-cols-3 gap-3">{[t.antiA, t.antiB, t.antiD].map((label) => <div key={label} className="text-center"><div className="mb-2 flex aspect-square items-center justify-center rounded-xl border-2 border-dashed border-[#cbd3c8] bg-[#f0f2ec]"><div className="size-10 rounded-full border-4 border-[#d7b0a8] bg-[#ead0ca] shadow-inner" /></div><span className="text-[11px] font-bold text-[#5e675f]">{label}</span></div>)}</div><div className="mt-6 flex justify-between text-[9px] font-medium uppercase tracking-[0.12em] text-[#a0a69f]"><span>ALIGN</span><span>KEEP FLAT</span><span>NO GLARE</span></div></div> }
 
-function ResultView({ t, onClose }: { t: typeof copy.en; onClose: () => void }) { return <div className="mx-auto max-w-[820px]"><button onClick={onClose} className="mb-8 flex items-center gap-2 text-sm font-bold text-[#6e786f] hover:text-[#8f2838]"><X size={16} />{t.close}</button><div className="rounded-[28px] border border-[#dfe3dc] bg-white p-6 shadow-[0_12px_40px_rgba(44,55,43,0.06)] sm:p-10"><div className="flex flex-col justify-between gap-5 border-b border-[#e6e9e4] pb-8 sm:flex-row sm:items-start"><div><p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#8f2838]">{t.demo}</p><h1 className="text-5xl font-semibold tracking-[-0.06em]">A<span className="text-[#8f2838]">+</span></h1><p className="mt-2 text-sm text-[#788179]">{t.demoResult}</p></div><div className="rounded-full bg-[#e9f0e7] px-4 py-2 text-xs font-bold text-[#446451]"><Check size={14} className="mr-1 inline" />INTERPRETABLE</div></div><div className="mt-8 grid gap-3 sm:grid-cols-3">{[[t.antiA, t.positive, true], [t.antiB, t.negative, false], [t.antiD, t.positive, true]].map(([label, status, positive]) => <div key={String(label)} className="rounded-2xl bg-[#f4f6f2] p-4"><p className="text-xs font-bold uppercase tracking-[0.12em] text-[#788179]">{label}</p><p className={`mt-3 text-sm font-bold ${positive ? 'text-[#8f2838]' : 'text-[#446451]'}`}><span className={`mr-2 inline-block size-2 rounded-full ${positive ? 'bg-[#b64a59]' : 'bg-[#699477]'}`} />{status}</p></div>)}</div><div className="mt-6 rounded-2xl bg-[#fff9ed] p-4 text-sm leading-6 text-[#7b684b]"><strong>{t.note}:</strong> {t.resultText}</div><button onClick={onClose} className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#dfe3dc] text-sm font-bold hover:bg-[#f4f6f2]">{t.repeat} <ArrowRight size={16} /></button></div></div> }
+function ResultView({ t, analysis, onClose }: { t: typeof copy.en; analysis: LocalAnalysis | null; onClose: () => void }) { return <div className="mx-auto max-w-[820px]"><button onClick={onClose} className="mb-8 flex items-center gap-2 text-sm font-bold text-[#6e786f] hover:text-[#8f2838]"><X size={16} />{t.close}</button><div className="rounded-[28px] border border-[#dfe3dc] bg-white p-6 shadow-[0_12px_40px_rgba(44,55,43,0.06)] sm:p-10"><div className="flex flex-col justify-between gap-5 border-b border-[#e6e9e4] pb-8 sm:flex-row sm:items-start"><div><p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#8f2838]">{t.demo}</p><h1 className="text-5xl font-semibold tracking-[-0.06em]">{analysis?.bloodType ?? t.inconclusive}</h1><p className="mt-2 text-sm text-[#788179]">{t.demoResult}</p></div><div className="rounded-full bg-[#e9f0e7] px-4 py-2 text-xs font-bold text-[#446451]"><Check size={14} className="mr-1 inline" />INTERPRETABLE</div></div><div className="mt-8 grid gap-3 sm:grid-cols-3">{[[t.antiA, t.positive, true], [t.antiB, t.negative, false], [t.antiD, t.positive, true]].map(([label, status, positive]) => <div key={String(label)} className="rounded-2xl bg-[#f4f6f2] p-4"><p className="text-xs font-bold uppercase tracking-[0.12em] text-[#788179]">{label}</p><p className={`mt-3 text-sm font-bold ${positive ? 'text-[#8f2838]' : 'text-[#446451]'}`}><span className={`mr-2 inline-block size-2 rounded-full ${positive ? 'bg-[#b64a59]' : 'bg-[#699477]'}`} />{status}</p></div>)}</div><div className="mt-6 rounded-2xl bg-[#fff9ed] p-4 text-sm leading-6 text-[#7b684b]"><strong>{t.note}:</strong> {t.resultText}</div><button onClick={onClose} className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#dfe3dc] text-sm font-bold hover:bg-[#f4f6f2]">{t.repeat} <ArrowRight size={16} /></button></div></div> }
 
 function HistoryView({ t }: { t: typeof copy.en }) { return <div className="mx-auto max-w-[900px]"><PageHeading icon={History} title={t.historyTitle} subtitle={t.readyText} /><div className="flex flex-col gap-3">{['A+ · Demo interpretation', 'O− · Controlled mock card', 'Inconclusive · Glare detected'].map((item, i) => <div key={item} className="flex items-center justify-between rounded-2xl border border-[#dfe3dc] bg-white p-5"><div className="flex items-center gap-4"><div className={`flex size-11 items-center justify-center rounded-xl ${i === 2 ? 'bg-[#fff1d7] text-[#a9782e]' : 'bg-[#e9f0e7] text-[#446451]'}`}><Clock3 size={19} /></div><div><p className="font-semibold">{item}</p><p className="mt-1 text-xs text-[#89918a]">{i + 1} days ago · Local only</p></div></div><ChevronRight size={18} className="text-[#a4ada4]" /></div>)}</div></div> }
 
