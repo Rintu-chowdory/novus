@@ -157,7 +157,20 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    background: #f7f7f3;
+  }
   body {
     @apply bg-background text-foreground;
+    font-family: Arial, Helvetica, sans-serif;
   }
+  ::selection {
+    background: #f1dfe1;
+    color: #76202f;
+  }
+}
+
+@keyframes slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
 }
